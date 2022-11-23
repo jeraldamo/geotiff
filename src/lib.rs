@@ -13,11 +13,14 @@ use std::fmt;
 
 mod lowlevel;
 mod reader;
+mod keys;
 pub mod tiff;
 
 use tiff::*;
 use reader::*;
+use lowlevel::{TIFFTag, TagValue};
 pub use tiff::TIFF;
+pub use keys::{GeoKeyDirectory, GeoKeyEntry};
 
 /// The GeoTIFF library reads `.tiff` files.
 ///
@@ -42,5 +45,31 @@ impl fmt::Display for TIFF {
         write!(f, "TIFF(Image size: [{}, {}, {}], Tag data: {:?})",
                self.image_data.len(), self.image_data[0].len(),
                self.image_data[0][0].len(), self.ifds)
+    }
+}
+
+
+impl GeoKeyDirectory {
+    pub fn parse(ifd: &IFD) -> Option<Self> {
+        for ifd_entry in &ifd.entries {
+            if ifd_entry.tag == TIFFTag::GeoKeyDirectoryTag {
+                let values = ifd_entry.value.iter()
+                    .map(|value| {
+                        match value {
+                            TagValue::ShortValue(n) => *n,
+                            _ => {panic!("GeoKeyDirectory entry value not a ShortValue")}
+                        }
+                    })
+                    .collect::<Vec<u16>>();
+
+                let mut keydirectory = GeoKeyDirectory::new(values[0], values[1], values[2], values[3]);
+                for i in (4..ifd_entry.value.len()).step_by(4) {
+                    keydirectory.add_key(GeoKeyEntry::new(values[i+0], values[i+1], values[i+2], values[i+3]));
+                }
+                return Some(keydirectory);
+            }
+        }
+
+        None
     }
 }
